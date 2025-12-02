@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: todo-app
+    ports:
+      # Format: "Port_Komputer_Kita:Port_Container"
+      # Karena entrypoint.sh pakai 8080, kita harus map 8080 di container
+      - "8080:8080"
+    volumes:
+      # Mapping folder lokal ke dalam container supaya bisa edit kodingan live
+      - .:/app
+    environment:
+      # Variable ini akan dibaca oleh entrypoint.sh
+      - PORT=8080
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
