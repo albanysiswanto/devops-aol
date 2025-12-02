@@ -1,21 +1,21 @@
-from flask import Flask, redirect, render_template, request
+from flask import Flask, redirect, render_template, request, g
 import sqlite3
 import os
 
 app = Flask(__name__)
 
-# --- FUNGSI INI TERPISAH DARI APLIKASI WEB ---
-# FUNGSI UNTUK INISIALISASI DATABASE IN-MEMORY
-# PERINGATAN: Data akan hilang saat container didaur ulang
+
+
+# --- FUNGSI INISIALISASI DATABASE ---
+
 def get_db_connection():
-    # Menggunakan mode ":memory:" agar database berada di RAM dan tidak ada masalah I/O file
+    # Menggunakan mode ":memory:"
     conn = sqlite3.connect(':memory:', check_same_thread=False)
+    conn.row_factory = sqlite3.Row # Mengizinkan akses kolom by name
     return conn
 
-# Fungsi untuk membuat tabel saat aplikasi dimulai
 def init_db(conn):
     cursor = conn.cursor()
-    # Hati-hati dengan sintaks, pastikan tabel memiliki primary key untuk id
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
             tid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,48 +31,50 @@ def init_db(conn):
     """)
     conn.commit()
 
-# --- INISIALISASI DATABASE IN-MEMORY SECARA GLOBAL ---
-# Kita tetap melakukan ini di luar, tapi karena :memory:, ini aman untuk boot
+# --- INISIALISASI GLOBAL (Hanya Sekali Saat Startup) ---
 try:
     GLOBAL_CONN = get_db_connection()
     init_db(GLOBAL_CONN)
 except Exception as e:
-    # Log error jika inisialisasi gagal, tapi tidak akan menghentikan Gunicorn
-    print(f"ERROR initializing in-memory DB: {e}")
+    # Penting: Jika inisialisasi gagal, Gunicorn akan tetap mencoba memulai
+    print(f"FATAL ERROR during in-memory DB initialization: {e}")
+
 
 # --- ROUTES APLIKASI ---
 
 @app.route('/addTask', methods=['GET'])
 def add_task():
-    # Menggunakan koneksi global (karena :memory: dan check_same_thread=False)
     conn = GLOBAL_CONN
     cursor = conn.cursor()
+    # Mengambil task dari query string
     task = request.args.get('task')
+    
     if task:
+        # Parameterisasi: Mencegah SQL Injection
         cursor.execute("INSERT INTO tasks(task) VALUES(?)", (task,))
         conn.commit()
     return redirect('/')
-
-# Endpoint ini tidak diperlukan karena 'home' sudah mengambil semua tugas
-# @app.route('/getTasks', methods=['GET'])
-# def get_tasks():
-#    return redirect('/')
 
 @app.route('/move-to-done/<int:id>/<string:task_name>')
 def move_to_done(id, task_name):
     conn = GLOBAL_CONN
     cursor = conn.cursor()
-    # Pastikan task_name tidak kosong sebelum insert
-    if task_name:
-        cursor.execute("INSERT INTO done(task, task_id) VALUES(?,?)", (task_name, id))
-        cursor.execute("DELETE FROM tasks WHERE tid = ?", (id,))
-        conn.commit()
+    
+    # 1. Pindahkan ke tabel 'done'
+    # Parameterisasi digunakan untuk memastikan keamanan data
+    cursor.execute("INSERT INTO done(task, task_id) VALUES(?,?)", (task_name, id))
+    
+    # 2. Hapus dari tabel 'tasks'
+    cursor.execute("DELETE FROM tasks WHERE tid = ?", (id,))
+    
+    conn.commit()
     return redirect('/')
 
 @app.route('/deleteTask/<int:id>')
 def deleteTask(id):
     conn = GLOBAL_CONN
     cursor = conn.cursor()
+    # Menghapus task dari daftar todo
     cursor.execute("DELETE FROM tasks WHERE tid=?", (id,))
     conn.commit()
     return redirect('/')
@@ -82,6 +84,7 @@ def deleteTask(id):
 def deleteCompletedTask(id):
     conn = GLOBAL_CONN
     cursor = conn.cursor()
+    # Menghapus task dari daftar selesai
     cursor.execute("DELETE FROM done WHERE did=?", (id,))
     conn.commit()
     return redirect('/')
@@ -89,23 +92,16 @@ def deleteCompletedTask(id):
 
 @app.route('/')
 def home():
-    # Menggunakan koneksi global yang sudah diinisialisasi
     conn = GLOBAL_CONN
     cursor = conn.cursor()
     
-    # Ambil semua tasks
+    # Ambil semua tasks (ID dan Nama Task)
     cursor.execute("SELECT tid, task FROM tasks ORDER BY tid DESC")
-    tasks = cursor.fetchall() 
+    # Menggunakan list comprehension untuk format yang lebih bersih (jika tidak menggunakan row_factory)
+    tasks = [(row[0], row[1]) for row in cursor.fetchall()]
     
     # Ambil semua done tasks
     cursor.execute("SELECT did, task FROM done ORDER BY did DESC")
-    done = cursor.fetchall()
+    done = [(row[0], row[1]) for row in cursor.fetchall()]
     
-    # Note: Flask Jinja2 akan mengakses data di index.html
     return render_template('index.html', tasks=tasks, done=done)
-
-
-# Baris yang menjalankan aplikasi secara lokal dihapus, karena Gunicorn yang akan menjalankannya
-# if __name__ == "__main__":
-#     app.run(debug=True)
-#     run_terraform()
