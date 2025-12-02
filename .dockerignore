@@ -1,0 +1,22 @@
+# Python caches
+__pycache__
+*.pyc
+
+# Virtual Environments (Very Important to ignore these!)
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Git files
+.git/
+.gitignore
+
+# Google Cloud & Terraform (Not needed inside the container)
+google-cloud-sdk/
+terraform/
+
+# Docker files (Optional, but good practice)
+Dockerfile
+docker-compose.yml
