@@ -1,7 +1,12 @@
-variable "aws_region" {
+variable "project_id" {
   type        = string
-  default     = "ap-southeast-1"
-  description = "AWS region"
+  description = "Google Cloud Project ID"
+}
+
+variable "region" {
+  type        = string
+  default     = "asia-southeast1"
+  description = "Google Cloud region"
 }
 
 variable "bucket_name" {

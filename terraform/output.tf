@@ -2,6 +2,6 @@ output "bucket_name" {
   value = var.bucket_name
 }
 
-output "aws_region" {
-  value = var.aws_region
+output "project_id" {
+  value = var.project_id
 }
